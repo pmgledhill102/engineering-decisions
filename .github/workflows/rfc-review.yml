@@ -1,0 +1,136 @@
+name: RFC Review
+on:
+  pull_request:
+    types: [ready_for_review]
+    paths: ['rfcs/**/*.md']
+
+jobs:
+  validate:
+    name: Validate RFC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Build rfclint
+        run: go build -o rfclint ./tools/rfclint/
+      - name: Find changed RFC files
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr diff "${{ github.event.pull_request.number }}" \
+            --name-only | grep '^rfcs/.*\.md$' | grep -v 'rfcs/README.md' || true)
+          echo "Changed RFC files: $files"
+          {
+            echo "files<<EOF"
+            echo "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run rfclint
+        if: steps.changed.outputs.files != ''
+        run: |
+          echo "${{ steps.changed.outputs.files }}" | while IFS= read -r file; do
+            [ -n "$file" ] && ./rfclint "$file"
+          done
+
+  ai-review:
+    name: AI Review (${{ matrix.persona }})
+    needs: validate
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      matrix:
+        persona:
+          - security-and-privacy
+          - reliability-and-operations
+          - developer-experience
+          - simplicity-advocate
+          - performance-and-scalability
+          - cost-efficiency
+          - accessibility-and-inclusivity
+          - ecosystem-and-interoperability
+          - testing-and-maintainability
+      max-parallel: 1
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Read persona prompt
+        id: persona
+        run: |
+          prompt=$(cat "personas/${{ matrix.persona }}.md")
+          {
+            echo "prompt<<EOF"
+            echo "$prompt"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Read changed RFC content
+        id: rfc
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr diff "${{ github.event.pull_request.number }}" \
+            --name-only | grep '^rfcs/.*\.md$' | grep -v 'rfcs/README.md' || true)
+          echo "Changed RFC files: $files"
+          content=""
+          for file in $files; do
+            [ -n "$file" ] && [ -f "$file" ] && content="${content}$(cat "$file")\n\n"
+          done
+          {
+            echo "content<<EOF"
+            echo -e "$content"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: AI Persona Review
+        if: steps.rfc.outputs.content != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PERSONA_PROMPT: ${{ steps.persona.outputs.prompt }}
+          RFC_CONTENT: ${{ steps.rfc.outputs.content }}
+        run: |
+          payload=$(jq -n \
+            --arg prompt "$PERSONA_PROMPT" \
+            --arg rfc "$RFC_CONTENT" \
+            '{
+              model: "claude-sonnet-4-5-20250929",
+              max_tokens: 4096,
+              messages: [{
+                role: "user",
+                content: ($prompt + "\n\n---\n\nHere is the RFC to review:\n\n" + $rfc)
+              }]
+            }')
+
+          response=$(curl -s -w "\n%{http_code}" \
+            https://api.anthropic.com/v1/messages \
+            -H "content-type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$payload")
+
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_code" -ne 200 ]; then
+            echo "::error::Anthropic API returned $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+          review=$(echo "$body" | jq -r '.content[0].text')
+          echo "$review"
+
+          # Post as PR comment
+          comment_body=$(jq -n \
+            --arg persona "${{ matrix.persona }}" \
+            --arg review "$review" \
+            '{ body: ("## 🤖 " + $persona + "\n\n" + $review) }')
+
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -d "$comment_body"

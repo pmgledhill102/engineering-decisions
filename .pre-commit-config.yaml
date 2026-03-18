@@ -1,0 +1,53 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v9.6.0
+    hooks:
+      - id: cspell
+        types_or: [markdown, plain-text, yaml]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.10
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.151.0
+    hooks:
+      - id: semgrep
+        args: ['--config', 'auto']
+
+  - repo: local
+    hooks:
+      - id: rfclint
+        name: rfclint
+        entry: go run ./tools/rfclint/
+        language: golang
+        files: '^rfcs/.*\.md$'
+        exclude: '^rfcs/README\.md$'
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.9.0
+    hooks:
+      - id: golangci-lint
+
+  - repo: local
+    hooks:
+      - id: go-fumpt
+        name: go-fumpt
+        entry: sh -c 'out=$(go run mvdan.cc/gofumpt@v0.9.2 -l -extra "$@") && [ -z "$out" ] || { echo "$out"; exit 1; }' --
+        language: system
+        types: [go]

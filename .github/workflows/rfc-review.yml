@@ -38,7 +38,7 @@ jobs:
   ai-review:
     name: AI Review (${{ matrix.persona }})
     needs: validate
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false && github.event.pull_request.user.login == 'pmgledhill102'
     runs-on: ubuntu-latest
     permissions:
       contents: read

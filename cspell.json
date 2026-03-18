@@ -46,7 +46,10 @@
     "anthropics",
     "unreviewed",
     "pmgledhill",
-    "Gledhill"
+    "Gledhill",
+    "fieldsets",
+    "subgraph",
+    "subgraphs"
   ],
   "dictionaries": ["en_US", "softwareTerms", "companies", "misc"]
 }

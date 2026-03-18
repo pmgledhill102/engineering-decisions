@@ -8,6 +8,7 @@ decisions are proposed, discussed, and recorded.
 | RFC | Title | Status | Authors | Date |
 |-----|-------|--------|---------|------|
 | [0001](0001-ai-augmented-decision-process.md) | AI-Augmented Decision Process for Engineering | proposed | Paul Gledhill (@pmgledhill102) | 2026-02-14 |
+| [0002](0002-graphql-migration.md) | Migrate API Gateway from REST to GraphQL | proposed | Paul Gledhill (@pmgledhill102) | 2026-03-18 |
 
 ## Submitting an RFC
 
